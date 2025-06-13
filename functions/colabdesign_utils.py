@@ -70,7 +70,7 @@ def binder_hallucination(design_name, starting_pdb, chain, target_hotspot_residu
         print('Adding cyclic offset...')
         add_cyclic_offset(af_model, offset_type=2)
 
-    if binder_chain = None:
+    if binder_chain == None:
         af_model.prep_inputs(pdb_filename=starting_pdb, chain=chain, binder_len=length, hotspot=target_hotspot_residues, seed=seed, rm_aa=advanced_settings["omit_AAs"],
                         rm_target_seq=advanced_settings["rm_template_seq_design"], rm_target_sc=advanced_settings["rm_template_sc_design"])
     else:

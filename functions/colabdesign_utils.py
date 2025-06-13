@@ -17,8 +17,40 @@ from .biopython_utils import hotspot_residues, calculate_clash_score, calc_ss_pe
 from .pyrosetta_utils import pr_relax, align_pdbs
 from .generic_utils import update_failures
 
+# adding sergey's cyclic offset function
+def add_cyclic_offset(self, offset_type=2):
+  '''add cyclic offset to connect N and C term'''
+  def cyclic_offset(L):
+    i = np.arange(L)
+    ij = np.stack([i,i+L],-1)
+    offset = i[:,None] - i[None,:]
+    c_offset = np.abs(ij[:,None,:,None] - ij[None,:,None,:]).min((2,3))
+    if offset_type == 1:
+      c_offset = c_offset
+    elif offset_type >= 2:
+      a = c_offset < np.abs(offset)
+      c_offset[a] = -c_offset[a]
+    if offset_type == 3:
+      idx = np.abs(c_offset) > 2
+      c_offset[idx] = (32 * c_offset[idx] )/  abs(c_offset[idx])
+    return c_offset * np.sign(offset)
+  idx = self._inputs["residue_index"]
+  offset = np.array(idx[:,None] - idx[None,:])
+
+  if self.protocol == "binder":
+    c_offset = cyclic_offset(self._binder_len)
+    offset[self._target_len:,self._target_len:] = c_offset
+
+  if self.protocol in ["fixbb","partial","hallucination"]:
+    Ln = 0
+    for L in self._lengths:
+      offset[Ln:Ln+L,Ln:Ln+L] = cyclic_offset(L)
+      Ln += L
+  self._inputs["offset"] = offset
+
+
 # hallucinate a binder
-def binder_hallucination(design_name, starting_pdb, chain, target_hotspot_residues, length, seed, helicity_value, design_models, advanced_settings, design_paths, failure_csv):
+def binder_hallucination(design_name, starting_pdb, chain, target_hotspot_residues, length, seed, helicity_value, design_models, advanced_settings, design_paths, failure_csv, is_cyclic=False, binder_chain=None):
     model_pdb_path = os.path.join(design_paths["Trajectory"], design_name+".pdb")
 
     # clear GPU memory for new trajectory
@@ -28,13 +60,24 @@ def binder_hallucination(design_name, starting_pdb, chain, target_hotspot_residu
     af_model = mk_afdesign_model(protocol="binder", debug=False, data_dir=advanced_settings["af_params_dir"], 
                                 use_multimer=advanced_settings["use_multimer_design"], num_recycles=advanced_settings["num_recycles_design"],
                                 best_metric='loss')
-
+    
     # sanity check for hotspots
     if target_hotspot_residues == "":
         target_hotspot_residues = None
 
-    af_model.prep_inputs(pdb_filename=starting_pdb, chain=chain, binder_len=length, hotspot=target_hotspot_residues, seed=seed, rm_aa=advanced_settings["omit_AAs"],
+    # check for cyclic design
+    if is_cyclic:
+        print('Adding cyclic offset...')
+        add_cyclic_offset(af_model, offset_type=2)
+
+    if binder_chain = None:
+        af_model.prep_inputs(pdb_filename=starting_pdb, chain=chain, binder_len=length, hotspot=target_hotspot_residues, seed=seed, rm_aa=advanced_settings["omit_AAs"],
                         rm_target_seq=advanced_settings["rm_template_seq_design"], rm_target_sc=advanced_settings["rm_template_sc_design"])
+    else:
+        print(f'Preparing inputs for the redesign of binder in chain {binder_chain}')
+        af_model.prep_inputs(pdb_filename=starting_pdb, chain=chain, binder_chain=binder_chain, binder_len=length, hotspot=target_hotspot_residues, seed=seed, rm_aa=advanced_settings["omit_AAs"],
+                        rm_target_seq=advanced_settings["rm_template_seq_design"], rm_target_sc=advanced_settings["rm_template_sc_design"])
+    
 
     ### Update weights based on specified settings
     af_model.opt["weights"].update({"pae":advanced_settings["weights_pae_intra"],

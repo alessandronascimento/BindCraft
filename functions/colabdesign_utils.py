@@ -65,11 +65,6 @@ def binder_hallucination(design_name, starting_pdb, chain, target_hotspot_residu
     if target_hotspot_residues == "":
         target_hotspot_residues = None
 
-    # check for cyclic design
-    if is_cyclic:
-        print('Adding cyclic offset...')
-        add_cyclic_offset(af_model, offset_type=2)
-
     if binder_chain == None:
         af_model.prep_inputs(pdb_filename=starting_pdb, chain=chain, binder_len=length, hotspot=target_hotspot_residues, seed=seed, rm_aa=advanced_settings["omit_AAs"],
                         rm_target_seq=advanced_settings["rm_template_seq_design"], rm_target_sc=advanced_settings["rm_template_sc_design"])
@@ -77,8 +72,12 @@ def binder_hallucination(design_name, starting_pdb, chain, target_hotspot_residu
         print(f'Preparing inputs for the redesign of binder in chain {binder_chain}')
         af_model.prep_inputs(pdb_filename=starting_pdb, chain=chain, binder_chain=binder_chain, binder_len=length, hotspot=target_hotspot_residues, seed=seed, rm_aa=advanced_settings["omit_AAs"],
                         rm_target_seq=advanced_settings["rm_template_seq_design"], rm_target_sc=advanced_settings["rm_template_sc_design"])
-    
 
+    # check for cyclic design
+    if is_cyclic:
+        print('Adding cyclic offset...')
+        add_cyclic_offset(af_model, offset_type=2)
+    
     ### Update weights based on specified settings
     af_model.opt["weights"].update({"pae":advanced_settings["weights_pae_intra"],
                                     "plddt":advanced_settings["weights_plddt"],
